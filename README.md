@@ -8,6 +8,9 @@ The **VMware Kinesis Client Library for GO** (VMware-Go-KCL) enables Go develope
 
 **VMware-Go-KCL** brings Go/Kubernetes community with Go language native implementation of KCL matching **exactly the same** API and functional spec of original [Java KCL v2.0](https://docs.aws.amazon.com/streams/latest/dev/kcl-migration.html) without the resource overhead of installing Java based MultiLangDaemon.
 
+## Why this fork?
+
+Just forked to update the aws-skd so we can use AIM roles with serviceaccounts in k8s
 
 ## Try it out
 
