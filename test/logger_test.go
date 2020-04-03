@@ -23,12 +23,13 @@ package test
 import (
 	"github.com/stretchr/testify/assert"
 
-	"github.com/sirupsen/logrus"
-	"go.uber.org/zap"
 	"testing"
 
-	"github.com/vmware/vmware-go-kcl/logger"
-	zaplogger "github.com/vmware/vmware-go-kcl/logger/zap"
+	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+
+	"github.com/singularityconsulting/vmware-go-kcl/logger"
+	zaplogger "github.com/singularityconsulting/vmware-go-kcl/logger/zap"
 )
 
 func TestZapLoggerWithConfig(t *testing.T) {
