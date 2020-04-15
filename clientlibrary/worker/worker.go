@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
@@ -171,10 +172,21 @@ func (w *Worker) initialize() error {
 		// create session for Kinesis
 		log.Infof("Creating Kinesis session")
 
+		myCustomResolver := func(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
+			if service == endpoints.KinesisServiceID {
+				return endpoints.ResolvedEndpoint{
+					URL:           w.kclConfig.KinesisEndpoint,
+					SigningRegion: w.kclConfig.RegionName,
+				}, nil
+			}
+
+			return endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
+		}
+
 		s, err := session.NewSession(&aws.Config{
-			Region:      aws.String(w.regionName),
-			Endpoint:    &w.kclConfig.KinesisEndpoint,
-			Credentials: w.kclConfig.KinesisCredentials,
+			Region:           aws.String(w.regionName),
+			EndpointResolver: endpoints.ResolverFunc(myCustomResolver),
+			Credentials:      w.kclConfig.KinesisCredentials,
 		})
 
 		if err != nil {
