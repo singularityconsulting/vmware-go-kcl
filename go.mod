@@ -1,7 +1,7 @@
 module github.com/singularityconsulting/vmware-go-kcl
 
 require (
-	github.com/aws/aws-sdk-go v1.30.3
+	github.com/aws/aws-sdk-go v1.30.7
 	github.com/google/uuid v1.1.1
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/prometheus/client_golang v1.5.1
