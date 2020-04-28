@@ -53,6 +53,7 @@ type MonitoringService struct {
 	leaseRenewals      *prom.CounterVec
 	getRecordsTime     *prom.HistogramVec
 	processRecordsTime *prom.HistogramVec
+	numShards          *prom.GaugeVec
 }
 
 // NewMonitoringService returns a Monitoring service publishing metrics to Prometheus.
@@ -97,6 +98,10 @@ func (p *MonitoringService) Init(appName, streamName, workerID string) error {
 		Name: p.namespace + `_process_records_duration_milliseconds`,
 		Help: "The time taken to process records",
 	}, []string{"kinesisStream", "shard"})
+	p.numShards = prom.NewGaugeVec(prom.GaugeOpts{
+		Name: p.namespace + `_num_shards_total`,
+		Help: "The number of shards in the stream",
+	}, []string{"kinesisStream"})
 
 	metrics := []prom.Collector{
 		p.processedBytes,
@@ -106,6 +111,7 @@ func (p *MonitoringService) Init(appName, streamName, workerID string) error {
 		p.leaseRenewals,
 		p.getRecordsTime,
 		p.processRecordsTime,
+		p.numShards,
 	}
 	for _, metric := range metrics {
 		err := prom.Register(metric)
@@ -163,4 +169,8 @@ func (p *MonitoringService) RecordGetRecordsTime(shard string, time float64) {
 
 func (p *MonitoringService) RecordProcessRecordsTime(shard string, time float64) {
 	p.processRecordsTime.With(prom.Labels{"shard": shard, "kinesisStream": p.streamName}).Observe(time)
+}
+
+func (p *MonitoringService) NumShards(shards int) {
+	p.numShards.With(prom.Labels{"kinesisStream": p.streamName}).Set(float64(shards))
 }

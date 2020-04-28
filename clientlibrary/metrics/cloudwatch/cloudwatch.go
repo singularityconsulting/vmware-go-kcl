@@ -328,12 +328,16 @@ func (cw *MonitoringService) RecordGetRecordsTime(shard string, time float64) {
 	defer m.Unlock()
 	m.getRecordsTime = append(m.getRecordsTime, time)
 }
+
 func (cw *MonitoringService) RecordProcessRecordsTime(shard string, time float64) {
 	m := cw.getOrCreatePerShardMetrics(shard)
 	m.Lock()
 	defer m.Unlock()
 	m.processRecordsTime = append(m.processRecordsTime, time)
 }
+
+// for cloudwatch we don't do anything for now
+func (cw *MonitoringService) NumShards(shards int) {}
 
 func (cw *MonitoringService) getOrCreatePerShardMetrics(shard string) *cloudWatchMetrics {
 	var i interface{}
