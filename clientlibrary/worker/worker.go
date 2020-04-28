@@ -172,22 +172,33 @@ func (w *Worker) initialize() error {
 		// create session for Kinesis
 		log.Infof("Creating Kinesis session")
 
-		myCustomResolver := func(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
-			if service == endpoints.KinesisServiceID {
-				return endpoints.ResolvedEndpoint{
-					URL:           w.kclConfig.KinesisEndpoint,
-					SigningRegion: w.kclConfig.RegionName,
-				}, nil
+		var s *session.Session
+		var err error
+
+		if len(w.kclConfig.KinesisEndpoint) > 0 {
+			myCustomResolver := func(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
+				if service == endpoints.KinesisServiceID {
+					return endpoints.ResolvedEndpoint{
+						URL:           w.kclConfig.KinesisEndpoint,
+						SigningRegion: w.kclConfig.RegionName,
+					}, nil
+				}
+
+				return endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
 			}
 
-			return endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
+			s, err = session.NewSession(&aws.Config{
+				Region:           aws.String(w.regionName),
+				EndpointResolver: endpoints.ResolverFunc(myCustomResolver),
+				Credentials:      w.kclConfig.KinesisCredentials,
+			})
+		} else {
+			s, err = session.NewSession(&aws.Config{
+				Region:      aws.String(w.regionName),
+				Endpoint:    aws.String(""),
+				Credentials: w.kclConfig.KinesisCredentials,
+			})
 		}
-
-		s, err := session.NewSession(&aws.Config{
-			Region:           aws.String(w.regionName),
-			EndpointResolver: endpoints.ResolverFunc(myCustomResolver),
-			Credentials:      w.kclConfig.KinesisCredentials,
-		})
 
 		if err != nil {
 			// no need to move forward
@@ -264,8 +275,11 @@ func (w *Worker) eventLoop() {
 			continue
 		}
 
-		if foundShards == 0 || foundShards != len(w.shardStatus) {
-			foundShards = len(w.shardStatus)
+		numShards := len(w.shardStatus)
+		w.mService.NumShards(numShards)
+
+		if foundShards == 0 || foundShards != numShards {
+			foundShards = numShards
 			log.Infof("Found %d shards", foundShards)
 		}
 
