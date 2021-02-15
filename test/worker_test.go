@@ -30,14 +30,14 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/prometheus/common/expfmt"
+	cfg "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/config"
+	"github.com/singularityconsulting/vmware-go-kcl/clientlibrary/metrics"
+	"github.com/singularityconsulting/vmware-go-kcl/clientlibrary/metrics/cloudwatch"
+	"github.com/singularityconsulting/vmware-go-kcl/clientlibrary/metrics/prometheus"
+	wk "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/worker"
+	"github.com/singularityconsulting/vmware-go-kcl/logger"
+	zaplogger "github.com/singularityconsulting/vmware-go-kcl/logger/zap"
 	"github.com/stretchr/testify/assert"
-	cfg "github.com/vmware/vmware-go-kcl/clientlibrary/config"
-	"github.com/vmware/vmware-go-kcl/clientlibrary/metrics"
-	"github.com/vmware/vmware-go-kcl/clientlibrary/metrics/cloudwatch"
-	"github.com/vmware/vmware-go-kcl/clientlibrary/metrics/prometheus"
-	wk "github.com/vmware/vmware-go-kcl/clientlibrary/worker"
-	"github.com/vmware/vmware-go-kcl/logger"
-	zaplogger "github.com/vmware/vmware-go-kcl/logger/zap"
 )
 
 const (

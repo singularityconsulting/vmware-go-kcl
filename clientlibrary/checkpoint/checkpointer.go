@@ -29,8 +29,9 @@ package checkpoint
 
 import (
 	"errors"
-	par "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/partition"
+	"fmt"
 
+	par "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/partition"
 )
 
 const (
