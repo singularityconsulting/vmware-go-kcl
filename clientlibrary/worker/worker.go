@@ -28,6 +28,7 @@
 package worker
 
 import (
+	"errors"
 	"math/rand"
 	"sync"
 	"time"
@@ -148,20 +149,6 @@ func (w *Worker) Shutdown() {
 	log.Infof("Worker loop is complete. Exiting from worker.")
 }
 
-// Publish to write some data into stream. This function is mainly used for testing purpose.
-func (w *Worker) Publish(streamName, partitionKey string, data []byte) error {
-	log := w.kclConfig.Logger
-	_, err := w.kc.PutRecord(&kinesis.PutRecordInput{
-		Data:         data,
-		StreamName:   aws.String(streamName),
-		PartitionKey: aws.String(partitionKey),
-	})
-	if err != nil {
-		log.Errorf("Error in publishing data to %s/%s. Error: %+v", streamName, partitionKey, err)
-	}
-	return err
-}
-
 // initialize
 func (w *Worker) initialize() error {
 	log := w.kclConfig.Logger
@@ -252,7 +239,7 @@ func (w *Worker) newShardConsumer(shard *par.ShardStatus) *ShardConsumer {
 		consumerID:      w.workerID,
 		stop:            w.stop,
 		mService:        w.mService,
-		state:           WAITING_ON_PARENT_SHARDS,
+		state:           WaitingOnParentShards,
 	}
 }
 
@@ -286,7 +273,7 @@ func (w *Worker) eventLoop() {
 		// Count the number of leases hold by this worker excluding the processed shard
 		counter := 0
 		for _, shard := range w.shardStatus {
-			if shard.GetLeaseOwner() == w.workerID && shard.Checkpoint != chk.SHARD_END {
+			if shard.GetLeaseOwner() == w.workerID && shard.Checkpoint != chk.ShardEnd {
 				counter++
 			}
 		}
@@ -310,14 +297,14 @@ func (w *Worker) eventLoop() {
 				}
 
 				// The shard is closed and we have processed all records
-				if shard.Checkpoint == chk.SHARD_END {
+				if shard.Checkpoint == chk.ShardEnd {
 					continue
 				}
 
 				err = w.checkpointer.GetLease(shard, w.workerID)
 				if err != nil {
 					// cannot get lease on the shard
-					if err.Error() != chk.ErrLeaseNotAquired {
+					if !errors.As(err, &chk.ErrLeaseNotAcquired{}) {
 						log.Errorf("Cannot get lease: %+v", err)
 					}
 					continue
