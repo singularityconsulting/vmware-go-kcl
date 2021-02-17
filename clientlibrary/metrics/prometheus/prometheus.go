@@ -54,6 +54,7 @@ type MonitoringService struct {
 	getRecordsTime     *prom.HistogramVec
 	processRecordsTime *prom.HistogramVec
 	numShards          *prom.GaugeVec
+	deaggregateError   *prom.CounterVec
 }
 
 // NewMonitoringService returns a Monitoring service publishing metrics to Prometheus.
@@ -102,6 +103,10 @@ func (p *MonitoringService) Init(appName, streamName, workerID string) error {
 		Name: p.namespace + `_num_shards_total`,
 		Help: "The number of shards in the stream",
 	}, []string{"kinesisStream"})
+	p.deaggregateError = prom.NewCounterVec(prom.CounterOpts{
+		Name: p.namespace + `_deaggregate_error_total`,
+		Help: "Number of deaggregate errors while processing kinesis records",
+	}, []string{"kinesisStream", "shard", "workerID"})
 
 	metrics := []prom.Collector{
 		p.processedBytes,
@@ -112,6 +117,7 @@ func (p *MonitoringService) Init(appName, streamName, workerID string) error {
 		p.getRecordsTime,
 		p.processRecordsTime,
 		p.numShards,
+		p.deaggregateError,
 	}
 	for _, metric := range metrics {
 		err := prom.Register(metric)
@@ -173,4 +179,8 @@ func (p *MonitoringService) RecordProcessRecordsTime(shard string, time float64)
 
 func (p *MonitoringService) NumShards(shards int) {
 	p.numShards.With(prom.Labels{"kinesisStream": p.streamName}).Set(float64(shards))
+}
+
+func (p *MonitoringService) DeaggregateError(shard string) {
+	p.deaggregateError.With(prom.Labels{"shard": shard, "kinesisStream": p.streamName, "workerID": p.workerID}).Inc()
 }

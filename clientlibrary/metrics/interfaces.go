@@ -39,6 +39,7 @@ type MonitoringService interface {
 	RecordGetRecordsTime(string, float64)
 	RecordProcessRecordsTime(string, float64)
 	NumShards(int)
+	DeaggregateError(string)
 	Shutdown()
 }
 
@@ -58,3 +59,4 @@ func (NoopMonitoringService) LeaseRenewed(shard string)                         
 func (NoopMonitoringService) RecordGetRecordsTime(shard string, time float64)      {}
 func (NoopMonitoringService) RecordProcessRecordsTime(shard string, time float64)  {}
 func (NoopMonitoringService) NumShards(shards int)                                 {}
+func (NoopMonitoringService) DeaggregateError(shard string)                        {}
