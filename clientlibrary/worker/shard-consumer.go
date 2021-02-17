@@ -215,6 +215,7 @@ func (sc *ShardConsumer) getRecords(shard *par.ShardStatus) error {
 			// The error is caused by bad KPL publisher and just skip the bad records
 			// instead of being stuck here.
 			log.Errorf("Error in de-aggregating KPL records: %+v", err)
+			sc.mService.DeaggregateError(shard.ID)
 		}
 
 		// IRecordProcessorCheckpointer
