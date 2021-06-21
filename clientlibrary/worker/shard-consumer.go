@@ -164,7 +164,7 @@ func (sc *ShardConsumer) getRecords(shard *par.ShardStatus) error {
 			err = sc.checkpointer.GetLease(shard, sc.consumerID)
 			if err != nil {
 				if errors.As(err, &chk.ErrLeaseNotAcquired{}) {
-					log.Warnf("Failed in acquiring lease on shard: %s for worker: %s", shard.ID, sc.consumerID)
+					log.Warnf("Failed in acquiring lease on shard: %s for worker: %s, error was: %+v", shard.ID, sc.consumerID, err)
 					return nil
 				}
 				// log and return error
