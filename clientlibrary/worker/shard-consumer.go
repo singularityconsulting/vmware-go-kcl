@@ -165,11 +165,19 @@ func (sc *ShardConsumer) getRecords(shard *par.ShardStatus) error {
 			if err != nil {
 				if errors.As(err, &chk.ErrLeaseNotAcquired{}) {
 					log.Warnf("Failed in acquiring lease on shard: %s for worker: %s, error was: %+v", shard.ID, sc.consumerID, err)
+
+					shutdownInput := &kcl.ShutdownInput{ShutdownReason: kcl.REQUESTED, Checkpointer: recordCheckpointer}
+					sc.recordProcessor.Shutdown(shutdownInput)
+
 					return nil
 				}
 				// log and return error
 				log.Errorf("Error in refreshing lease on shard: %s for worker: %s. Error: %+v",
 					shard.ID, sc.consumerID, err)
+
+				shutdownInput := &kcl.ShutdownInput{ShutdownReason: kcl.REQUESTED, Checkpointer: recordCheckpointer}
+				sc.recordProcessor.Shutdown(shutdownInput)
+
 				return err
 			}
 		}
@@ -195,6 +203,10 @@ func (sc *ShardConsumer) getRecords(shard *par.ShardStatus) error {
 				}
 			}
 			log.Errorf("Error getting records from Kinesis that cannot be retried: %+v Request: %s", err, getRecordsArgs)
+
+			shutdownInput := &kcl.ShutdownInput{ShutdownReason: kcl.REQUESTED, Checkpointer: recordCheckpointer}
+			sc.recordProcessor.Shutdown(shutdownInput)
+
 			return err
 		}
 
