@@ -269,6 +269,12 @@ func (checkpointer *DynamoCheckpoint) RemoveLeaseOwner(shardID string) error {
 			},
 		},
 		UpdateExpression: aws.String("remove " + LeaseOwnerKey),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":assigned_to": {
+				S: aws.String(checkpointer.kclConfig.WorkerID),
+			},
+		},
+		ConditionExpression: aws.String("AssignedTo = :assigned_to"),
 	}
 
 	_, err := checkpointer.svc.UpdateItem(input)
