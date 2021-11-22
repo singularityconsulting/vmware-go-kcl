@@ -71,6 +71,8 @@ func (p *MonitoringService) Init(appName, streamName, workerID string) error {
 	p.streamName = streamName
 	p.workerID = workerID
 
+	millisecondsBuckets := []float64{5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000}
+
 	p.processedBytes = prom.NewCounterVec(prom.CounterOpts{
 		Name: p.namespace + `_processed_bytes`,
 		Help: "Number of bytes processed",
@@ -92,12 +94,14 @@ func (p *MonitoringService) Init(appName, streamName, workerID string) error {
 		Help: "The number of successful lease renewals",
 	}, []string{"kinesisStream", "shard", "workerID"})
 	p.getRecordsTime = prom.NewHistogramVec(prom.HistogramOpts{
-		Name: p.namespace + `_get_records_duration_milliseconds`,
-		Help: "The time taken to fetch records and process them",
+		Name:    p.namespace + `_get_records_duration_milliseconds`,
+		Help:    "The time taken to fetch records and process them",
+		Buckets: millisecondsBuckets,
 	}, []string{"kinesisStream", "shard"})
 	p.processRecordsTime = prom.NewHistogramVec(prom.HistogramOpts{
-		Name: p.namespace + `_process_records_duration_milliseconds`,
-		Help: "The time taken to process records",
+		Name:    p.namespace + `_process_records_duration_milliseconds`,
+		Help:    "The time taken to process records",
+		Buckets: millisecondsBuckets,
 	}, []string{"kinesisStream", "shard"})
 	p.numShards = prom.NewGaugeVec(prom.GaugeOpts{
 		Name: p.namespace + `_num_shards_total`,
