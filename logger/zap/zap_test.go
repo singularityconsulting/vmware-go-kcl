@@ -3,9 +3,9 @@ package zap_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/singularityconsulting/vmware-go-kcl/logger"
 	"github.com/singularityconsulting/vmware-go-kcl/logger/zap"
+	"github.com/stretchr/testify/assert"
 	uzap "go.uber.org/zap"
 )
 

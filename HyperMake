@@ -8,8 +8,8 @@ targets:
   rebuild-toolchain:
     description: build toolchain image
     watches:
-      - support/docker/toolchain
-    build: support/docker/toolchain
+      - support/toolchain/docker
+    build: support/toolchain/docker
 
   toolchain:
     description: placeholder for additional toolchain dependencies
@@ -21,7 +21,6 @@ targets:
     watches:
       - go.mod
     cmds:
-      - export GO111MODULE=on
       - go mod download
       - go mod vendor
       - go mod tidy
@@ -88,5 +87,5 @@ settings:
   default-targets:
     - test
   docker:
-    image: 'vmware/go-kcl-toolchain:0.1.2'
-    src-volume: /go/src/github.com/singularityconsulting/vmware-go-kcl
+    image: 'vmware/go-kcl-toolchain:0.1.4'
+    src-volume: /go/src/github.com/vmware/vmware-go-kcl

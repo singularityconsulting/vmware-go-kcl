@@ -37,9 +37,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/singularityconsulting/vmware-go-kcl/clientlibrary/metrics"
-
 	"github.com/aws/aws-sdk-go/aws/credentials"
+
+	"github.com/singularityconsulting/vmware-go-kcl/clientlibrary/metrics"
 	"github.com/singularityconsulting/vmware-go-kcl/clientlibrary/utils"
 	"github.com/singularityconsulting/vmware-go-kcl/logger"
 )
@@ -73,6 +73,7 @@ func NewKinesisClientLibConfigWithCredentials(applicationName, streamName, regio
 		KinesisCredentials:                               kiniesisCreds,
 		DynamoDBCredentials:                              dynamodbCreds,
 		TableName:                                        applicationName,
+		EnhancedFanOutConsumerName:                       applicationName,
 		StreamName:                                       streamName,
 		RegionName:                                       regionName,
 		WorkerID:                                         workerID,
@@ -94,7 +95,11 @@ func NewKinesisClientLibConfigWithCredentials(applicationName, streamName, regio
 		InitialLeaseTableReadCapacity:                    DefaultInitialLeaseTableReadCapacity,
 		InitialLeaseTableWriteCapacity:                   DefaultInitialLeaseTableWriteCapacity,
 		SkipShardSyncAtWorkerInitializationIfLeasesExist: DefaultSkipShardSyncAtStartupIfLeasesExist,
-		Logger: logger.GetDefaultLogger(),
+		EnableLeaseStealing:                              DefaultEnableLeaseStealing,
+		LeaseStealingIntervalMillis:                      DefaultLeaseStealingIntervalMillis,
+		LeaseStealingClaimTimeoutMillis:                  DefaultLeaseStealingClaimTimeoutMillis,
+		LeaseSyncingTimeIntervalMillis:                   DefaultLeaseSyncingIntervalMillis,
+		Logger:                                           logger.GetDefaultLogger(),
 	}
 }
 
@@ -210,5 +215,48 @@ func (c *KinesisClientLibConfiguration) WithMonitoringService(mService metrics.M
 	// Nil case is handled downward (at worker creation) so no need to do it here.
 	// Plus the user might want to be explicit about passing a nil monitoring service here.
 	c.MonitoringService = mService
+	return c
+}
+
+// WithEnhancedFanOutConsumer sets EnableEnhancedFanOutConsumer. If enhanced fan-out is enabled and ConsumerName is not specified ApplicationName is used as ConsumerName.
+// For more info see: https://docs.aws.amazon.com/streams/latest/dev/enhanced-consumers.html
+// Note: You can register up to twenty consumers per stream to use enhanced fan-out.
+func (c *KinesisClientLibConfiguration) WithEnhancedFanOutConsumer(enable bool) *KinesisClientLibConfiguration {
+	c.EnableEnhancedFanOutConsumer = enable
+	return c
+}
+
+// WithEnhancedFanOutConsumerName enables enhanced fan-out consumer with the specified name
+// For more info see: https://docs.aws.amazon.com/streams/latest/dev/enhanced-consumers.html
+// Note: You can register up to twenty consumers per stream to use enhanced fan-out.
+func (c *KinesisClientLibConfiguration) WithEnhancedFanOutConsumerName(consumerName string) *KinesisClientLibConfiguration {
+	checkIsValueNotEmpty("EnhancedFanOutConsumerName", consumerName)
+	c.EnhancedFanOutConsumerName = consumerName
+	c.EnableEnhancedFanOutConsumer = true
+	return c
+}
+
+// WithEnhancedFanOutConsumerARN enables enhanced fan-out consumer with the specified consumer ARN
+// For more info see: https://docs.aws.amazon.com/streams/latest/dev/enhanced-consumers.html
+// Note: You can register up to twenty consumers per stream to use enhanced fan-out.
+func (c *KinesisClientLibConfiguration) WithEnhancedFanOutConsumerARN(consumerARN string) *KinesisClientLibConfiguration {
+	checkIsValueNotEmpty("EnhancedFanOutConsumerARN", consumerARN)
+	c.EnhancedFanOutConsumerARN = consumerARN
+	c.EnableEnhancedFanOutConsumer = true
+	return c
+}
+
+func (c *KinesisClientLibConfiguration) WithLeaseStealing(enableLeaseStealing bool) *KinesisClientLibConfiguration {
+	c.EnableLeaseStealing = enableLeaseStealing
+	return c
+}
+
+func (c *KinesisClientLibConfiguration) WithLeaseStealingIntervalMillis(leaseStealingIntervalMillis int) *KinesisClientLibConfiguration {
+	c.LeaseStealingIntervalMillis = leaseStealingIntervalMillis
+	return c
+}
+
+func (c *KinesisClientLibConfiguration) WithLeaseSyncingIntervalMillis(leaseSyncingIntervalMillis int) *KinesisClientLibConfiguration {
+	c.LeaseSyncingTimeIntervalMillis = leaseSyncingIntervalMillis
 	return c
 }

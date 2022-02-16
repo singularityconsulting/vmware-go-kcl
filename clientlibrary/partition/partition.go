@@ -30,6 +30,8 @@ package worker
 import (
 	"sync"
 	"time"
+
+	"github.com/singularityconsulting/vmware-go-kcl/clientlibrary/config"
 )
 
 type ShardStatus struct {
@@ -37,17 +39,18 @@ type ShardStatus struct {
 	ParentShardId string
 	Checkpoint    string
 	AssignedTo    string
-	Mux           *sync.Mutex
+	Mux           *sync.RWMutex
 	LeaseTimeout  time.Time
 	// Shard Range
 	StartingSequenceNumber string
 	// child shard doesn't have end sequence number
 	EndingSequenceNumber string
+	ClaimRequest         string
 }
 
 func (ss *ShardStatus) GetLeaseOwner() string {
-	ss.Mux.Lock()
-	defer ss.Mux.Unlock()
+	ss.Mux.RLock()
+	defer ss.Mux.RUnlock()
 	return ss.AssignedTo
 }
 
@@ -55,4 +58,37 @@ func (ss *ShardStatus) SetLeaseOwner(owner string) {
 	ss.Mux.Lock()
 	defer ss.Mux.Unlock()
 	ss.AssignedTo = owner
+}
+
+func (ss *ShardStatus) GetCheckpoint() string {
+	ss.Mux.RLock()
+	defer ss.Mux.RUnlock()
+	return ss.Checkpoint
+}
+
+func (ss *ShardStatus) SetCheckpoint(c string) {
+	ss.Mux.Lock()
+	defer ss.Mux.Unlock()
+	ss.Checkpoint = c
+}
+
+func (ss *ShardStatus) GetLeaseTimeout() time.Time {
+	ss.Mux.Lock()
+	defer ss.Mux.Unlock()
+	return ss.LeaseTimeout
+}
+
+func (ss *ShardStatus) SetLeaseTimeout(timeout time.Time) {
+	ss.Mux.Lock()
+	defer ss.Mux.Unlock()
+	ss.LeaseTimeout = timeout
+}
+
+func (ss *ShardStatus) IsClaimRequestExpired(kclConfig *config.KinesisClientLibConfiguration) bool {
+	if leaseTimeout := ss.GetLeaseTimeout(); leaseTimeout.IsZero() {
+		return false
+	} else {
+		return leaseTimeout.
+			Before(time.Now().UTC().Add(time.Duration(-kclConfig.LeaseStealingClaimTimeoutMillis) * time.Millisecond))
+	}
 }

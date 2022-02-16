@@ -27,18 +27,17 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
-
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 
 	chk "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/checkpoint"
 	cfg "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/config"
 	par "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/partition"
 	wk "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/worker"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestWorkerInjectCheckpointer(t *testing.T) {
-	kclConfig := cfg.NewKinesisClientLibConfig("appName", streamName, regionName, workerID).
+	kclConfig := cfg.NewKinesisClientLibConfig(appName, streamName, regionName, workerID).
 		WithInitialPositionInStream(cfg.LATEST).
 		WithMaxRecords(10).
 		WithMaxLeasesForWorker(1).
@@ -53,6 +52,12 @@ func TestWorkerInjectCheckpointer(t *testing.T) {
 	// configure cloudwatch as metrics system
 	kclConfig.WithMonitoringService(getMetricsConfig(kclConfig, metricsSystem))
 
+	// Put some data into stream.
+	kc := NewKinesisClient(t, regionName, kclConfig.KinesisEndpoint, kclConfig.KinesisCredentials)
+	// publishSomeData(t, kc)
+	stop := continuouslyPublishSomeData(t, kc)
+	defer stop()
+
 	// custom checkpointer or a mock checkpointer.
 	checkpointer := chk.NewDynamoCheckpoint(kclConfig)
 
@@ -63,18 +68,14 @@ func TestWorkerInjectCheckpointer(t *testing.T) {
 	err := worker.Start()
 	assert.Nil(t, err)
 
-	// Put some data into stream.
-	kc := NewKinesisClient(t, regionName, kclConfig.KinesisEndpoint, kclConfig.KinesisCredentials)
-	publishSomeData(t, kc)
-
 	// wait a few seconds before shutdown processing
-	time.Sleep(10 * time.Second)
+	time.Sleep(30 * time.Second)
 	worker.Shutdown()
 
 	// verify the checkpointer after graceful shutdown
 	status := &par.ShardStatus{
 		ID:  shardID,
-		Mux: &sync.Mutex{},
+		Mux: &sync.RWMutex{},
 	}
 	checkpointer.FetchCheckpoint(status)
 
@@ -87,7 +88,7 @@ func TestWorkerInjectCheckpointer(t *testing.T) {
 }
 
 func TestWorkerInjectKinesis(t *testing.T) {
-	kclConfig := cfg.NewKinesisClientLibConfig("appName", streamName, regionName, workerID).
+	kclConfig := cfg.NewKinesisClientLibConfig(appName, streamName, regionName, workerID).
 		WithInitialPositionInStream(cfg.LATEST).
 		WithMaxRecords(10).
 		WithMaxLeasesForWorker(1).
@@ -109,6 +110,11 @@ func TestWorkerInjectKinesis(t *testing.T) {
 	})
 	assert.Nil(t, err)
 	kc := kinesis.New(s)
+
+	// Put some data into stream.
+	// publishSomeData(t, kc)
+	stop := continuouslyPublishSomeData(t, kc)
+	defer stop()
 
 	// Inject a custom checkpointer into the worker.
 	worker := wk.NewWorker(recordProcessorFactory(t), kclConfig).
@@ -117,16 +123,13 @@ func TestWorkerInjectKinesis(t *testing.T) {
 	err = worker.Start()
 	assert.Nil(t, err)
 
-	// Put some data into stream.
-	publishSomeData(t, kc)
-
 	// wait a few seconds before shutdown processing
-	time.Sleep(10 * time.Second)
+	time.Sleep(30 * time.Second)
 	worker.Shutdown()
 }
 
 func TestWorkerInjectKinesisAndCheckpointer(t *testing.T) {
-	kclConfig := cfg.NewKinesisClientLibConfig("appName", streamName, regionName, workerID).
+	kclConfig := cfg.NewKinesisClientLibConfig(appName, streamName, regionName, workerID).
 		WithInitialPositionInStream(cfg.LATEST).
 		WithMaxRecords(10).
 		WithMaxLeasesForWorker(1).
@@ -148,6 +151,11 @@ func TestWorkerInjectKinesisAndCheckpointer(t *testing.T) {
 	})
 	assert.Nil(t, err)
 	kc := kinesis.New(s)
+
+	// Put some data into stream.
+	// publishSomeData(t, kc)
+	stop := continuouslyPublishSomeData(t, kc)
+	defer stop()
 
 	// custom checkpointer or a mock checkpointer.
 	checkpointer := chk.NewDynamoCheckpoint(kclConfig)
@@ -160,10 +168,7 @@ func TestWorkerInjectKinesisAndCheckpointer(t *testing.T) {
 	err = worker.Start()
 	assert.Nil(t, err)
 
-	// Put some data into stream.
-	publishSomeData(t, kc)
-
 	// wait a few seconds before shutdown processing
-	time.Sleep(10 * time.Second)
+	time.Sleep(30 * time.Second)
 	worker.Shutdown()
 }

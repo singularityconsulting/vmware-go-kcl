@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 VMware, Inc.
+ * Copyright (c) 2021 VMware, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
  * associated documentation files (the "Software"), to deal in the Software without restriction, including
@@ -16,40 +16,16 @@
  * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
-// Package utils
 package utils
 
 import (
-	"crypto/rand"
-	"math/big"
-	"time"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 )
 
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-const (
-	letterIdxBits = 6                    // 6 bits to represent a letter index
-	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
-)
-
-func RandStringBytesMaskImpr(n int) string {
-	b := make([]byte, n)
-	seed := time.Now().UTC().UnixNano()
-	rnd, _ := rand.Int(rand.Reader, big.NewInt(seed))
-	// A rand.Int64() generates 64 random bits, enough for letterIdxMax letters!
-	for i, cache, remain := n-1, rnd.Int64(), letterIdxMax; i >= 0; {
-		if remain == 0 {
-			rnd, _ = rand.Int(rand.Reader, big.NewInt(seed))
-			cache, remain = rnd.Int64(), letterIdxMax
-		}
-		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
-			b[i] = letterBytes[idx]
-			i--
-		}
-		cache >>= letterIdxBits
-		remain--
+func AWSErrCode(err error) string {
+	awsErr, _ := err.(awserr.Error)
+	if awsErr != nil {
+		return awsErr.Code()
 	}
-
-	return string(b)
+	return ""
 }

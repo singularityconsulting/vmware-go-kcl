@@ -16,6 +16,8 @@
  * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
+// Package worker
 // The implementation is derived from https://github.com/patrobinson/gokini
 //
 // Copyright 2018 Patrick robinson
@@ -28,8 +30,9 @@
 package worker
 
 import (
+	"crypto/rand"
 	"errors"
-	"math/rand"
+	"math/big"
 	"sync"
 	"time"
 
@@ -46,15 +49,14 @@ import (
 	par "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/partition"
 )
 
-/**
- * Worker is the high level class that Kinesis applications use to start processing data. It initializes and oversees
- * different components (e.g. syncing shard and lease information, tracking shard assignments, and processing data from
- * the shards).
- */
+//Worker is the high level class that Kinesis applications use to start processing data. It initializes and oversees
+//different components (e.g. syncing shard and lease information, tracking shard assignments, and processing data from
+//the shards).
 type Worker struct {
-	streamName string
-	regionName string
-	workerID   string
+	streamName  string
+	regionName  string
+	workerID    string
+	consumerARN string
 
 	processorFactory kcl.IRecordProcessorFactory
 	kclConfig        *config.KinesisClientLibConfiguration
@@ -66,9 +68,10 @@ type Worker struct {
 	waitGroup *sync.WaitGroup
 	done      bool
 
-	rng *rand.Rand
+	randomSeed int64
 
-	shardStatus map[string]*par.ShardStatus
+	shardStatus          map[string]*par.ShardStatus
+	shardStealInProgress bool
 }
 
 // NewWorker constructs a Worker instance for processing Kinesis stream data.
@@ -79,9 +82,6 @@ func NewWorker(factory kcl.IRecordProcessorFactory, kclConfig *config.KinesisCli
 		mService = metrics.NoopMonitoringService{}
 	}
 
-	// Create a pseudo-random number generator and seed it.
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	return &Worker{
 		streamName:       kclConfig.StreamName,
 		regionName:       kclConfig.RegionName,
@@ -90,7 +90,7 @@ func NewWorker(factory kcl.IRecordProcessorFactory, kclConfig *config.KinesisCli
 		kclConfig:        kclConfig,
 		mService:         mService,
 		done:             false,
-		rng:              rng,
+		randomSeed:       time.Now().UTC().UnixNano(),
 	}
 }
 
@@ -204,6 +204,19 @@ func (w *Worker) initialize() error {
 		log.Infof("Use custom checkpointer implementation.")
 	}
 
+	if w.kclConfig.EnableEnhancedFanOutConsumer {
+		log.Debugf("Enhanced fan-out is enabled")
+		w.consumerARN = w.kclConfig.EnhancedFanOutConsumerARN
+		if w.consumerARN == "" {
+			var err error
+			w.consumerARN, err = w.fetchConsumerARNWithRetry()
+			if err != nil {
+				log.Errorf("Failed to fetch consumer ARN for: %s, %v", w.kclConfig.EnhancedFanOutConsumerName, err)
+				return err
+			}
+		}
+	}
+
 	err := w.mService.Init(w.kclConfig.ApplicationName, w.streamName, w.workerID)
 	if err != nil {
 		log.Errorf("Failed to start monitoring service: %+v", err)
@@ -228,18 +241,31 @@ func (w *Worker) initialize() error {
 }
 
 // newShardConsumer to create a shard consumer instance
-func (w *Worker) newShardConsumer(shard *par.ShardStatus) *ShardConsumer {
-	return &ShardConsumer{
-		streamName:      w.streamName,
+func (w *Worker) newShardConsumer(shard *par.ShardStatus) shardConsumer {
+	common := commonShardConsumer{
 		shard:           shard,
 		kc:              w.kc,
 		checkpointer:    w.checkpointer,
 		recordProcessor: w.processorFactory.CreateProcessor(),
 		kclConfig:       w.kclConfig,
-		consumerID:      w.workerID,
-		stop:            w.stop,
 		mService:        w.mService,
-		state:           WaitingOnParentShards,
+	}
+	if w.kclConfig.EnableEnhancedFanOutConsumer {
+		w.kclConfig.Logger.Infof("Start enhanced fan-out shard consumer for shard: %v", shard.ID)
+		return &FanOutShardConsumer{
+			commonShardConsumer: common,
+			consumerARN:         w.consumerARN,
+			consumerID:          w.workerID,
+			stop:                w.stop,
+		}
+	}
+	w.kclConfig.Logger.Infof("Start polling shard consumer for shard: %v", shard.ID)
+	return &PollingShardConsumer{
+		commonShardConsumer: common,
+		streamName:          w.streamName,
+		consumerID:          w.workerID,
+		stop:                w.stop,
+		mService:            w.mService,
 	}
 }
 
@@ -253,7 +279,8 @@ func (w *Worker) eventLoop() {
 		// starts at the same time, this decreases the probability of them calling
 		// kinesis.DescribeStream at the same time, and hit the hard-limit on aws API calls.
 		// On average the period remains the same so that doesn't affect behavior.
-		shardSyncSleep := w.kclConfig.ShardSyncIntervalMillis/2 + w.rng.Intn(int(w.kclConfig.ShardSyncIntervalMillis))
+		rnd, _ := rand.Int(rand.Reader, big.NewInt(int64(w.kclConfig.ShardSyncIntervalMillis)))
+		shardSyncSleep := w.kclConfig.ShardSyncIntervalMillis/2 + int(rnd.Int64())
 
 		err := w.syncShard()
 		if err != nil {
@@ -273,7 +300,7 @@ func (w *Worker) eventLoop() {
 		// Count the number of leases hold by this worker excluding the processed shard
 		counter := 0
 		for _, shard := range w.shardStatus {
-			if shard.GetLeaseOwner() == w.workerID && shard.Checkpoint != chk.ShardEnd {
+			if shard.GetLeaseOwner() == w.workerID && shard.GetCheckpoint() != chk.ShardEnd {
 				counter++
 			}
 		}
@@ -297,8 +324,22 @@ func (w *Worker) eventLoop() {
 				}
 
 				// The shard is closed and we have processed all records
-				if shard.Checkpoint == chk.ShardEnd {
+				if shard.GetCheckpoint() == chk.ShardEnd {
 					continue
+				}
+
+				var stealShard bool
+				if w.kclConfig.EnableLeaseStealing && shard.ClaimRequest != "" {
+					upcomingStealingInterval := time.Now().UTC().Add(time.Duration(w.kclConfig.LeaseStealingIntervalMillis) * time.Millisecond)
+					if shard.GetLeaseTimeout().Before(upcomingStealingInterval) && !shard.IsClaimRequestExpired(w.kclConfig) {
+						if shard.ClaimRequest == w.workerID {
+							stealShard = true
+							log.Debugf("Stealing shard: %s", shard.ID)
+						} else {
+							log.Debugf("Shard being stolen: %s", shard.ID)
+							continue
+						}
+					}
 				}
 
 				err = w.checkpointer.GetLease(shard, w.workerID)
@@ -310,20 +351,32 @@ func (w *Worker) eventLoop() {
 					continue
 				}
 
+				if stealShard {
+					log.Debugf("Successfully stole shard: %+v", shard.ID)
+					w.shardStealInProgress = false
+				}
+
 				// log metrics on got lease
 				w.mService.LeaseGained(shard.ID)
 
 				log.Infof("Start Shard Consumer for shard: %v", shard.ID)
-				sc := w.newShardConsumer(shard)
+
 				w.waitGroup.Add(1)
-				go func() {
+				go func(shard *par.ShardStatus) {
 					defer w.waitGroup.Done()
-					if err := sc.getRecords(shard); err != nil {
+					if err := w.newShardConsumer(shard).getRecords(); err != nil {
 						log.Errorf("Error in getRecords: %+v", err)
 					}
-				}()
+				}(shard)
 				// exit from for loop and not to grab more shard for now.
 				break
+			}
+		}
+
+		if w.kclConfig.EnableLeaseStealing {
+			err = w.rebalance()
+			if err != nil {
+				log.Warnf("Error in rebalance: %+v", err)
 			}
 		}
 
@@ -335,6 +388,91 @@ func (w *Worker) eventLoop() {
 			log.Debugf("Waited %d ms to sync shards...", shardSyncSleep)
 		}
 	}
+}
+
+func (w *Worker) rebalance() error {
+	log := w.kclConfig.Logger
+
+	workers, err := w.checkpointer.ListActiveWorkers(w.shardStatus)
+	if err != nil {
+		log.Debugf("Error listing workers. workerID: %s. Error: %+v ", w.workerID, err)
+		return err
+	}
+
+	// Only attempt to steal one shard at time, to allow for linear convergence
+	if w.shardStealInProgress {
+		shardInfo := make(map[string]bool)
+		err := w.getShardIDs("", shardInfo)
+		if err != nil {
+			return err
+		}
+		for _, shard := range w.shardStatus {
+			if shard.ClaimRequest != "" && shard.ClaimRequest == w.workerID {
+				log.Debugf("Steal in progress. workerID: %s", w.workerID)
+				return nil
+			}
+			// Our shard steal was stomped on by a Checkpoint.
+			// We could deal with that, but instead just try again
+			w.shardStealInProgress = false
+		}
+	}
+
+	var numShards int
+	for _, shards := range workers {
+		numShards += len(shards)
+	}
+
+	numWorkers := len(workers)
+
+	// 1:1 shards to workers is optimal, so we cannot possibly rebalance
+	if numWorkers >= numShards {
+		log.Debugf("Optimal shard allocation, not stealing any shards. workerID: %s, %v > %v. ", w.workerID, numWorkers, numShards)
+		return nil
+	}
+
+	currentShards, ok := workers[w.workerID]
+	var numCurrentShards int
+	if !ok {
+		numCurrentShards = 0
+		numWorkers++
+	} else {
+		numCurrentShards = len(currentShards)
+	}
+
+	optimalShards := numShards / numWorkers
+
+	// We have more than or equal optimal shards, so no rebalancing can take place
+	if numCurrentShards >= optimalShards || numCurrentShards == w.kclConfig.MaxLeasesForWorker {
+		log.Debugf("We have enough shards, not attempting to steal any. workerID: %s", w.workerID)
+		return nil
+	}
+
+	var workerSteal string
+	for worker, shards := range workers {
+		if worker != w.workerID && len(shards) > optimalShards {
+			workerSteal = worker
+			optimalShards = len(shards)
+		}
+	}
+	// Not all shards are allocated so fallback to default shard allocation mechanisms
+	if workerSteal == "" {
+		log.Infof("Not all shards are allocated, not stealing any. workerID: %s", w.workerID)
+		return nil
+	}
+
+	// Steal a random shard from the worker with the most shards
+	w.shardStealInProgress = true
+	rnd, _ := rand.Int(rand.Reader, big.NewInt(int64(len(workers[workerSteal]))))
+	randIndex := int(rnd.Int64())
+	shardToSteal := workers[workerSteal][randIndex]
+	log.Debugf("Stealing shard %s from %s", shardToSteal, workerSteal)
+
+	err = w.checkpointer.ClaimShard(w.shardStatus[shardToSteal.ID], w.workerID)
+	if err != nil {
+		w.shardStealInProgress = false
+		return err
+	}
+	return nil
 }
 
 // List all shards and store them into shardStatus table
@@ -367,7 +505,7 @@ func (w *Worker) getShardIDs(nextToken string, shardInfo map[string]bool) error 
 			w.shardStatus[*s.ShardId] = &par.ShardStatus{
 				ID:                     *s.ShardId,
 				ParentShardId:          aws.StringValue(s.ParentShardId),
-				Mux:                    &sync.Mutex{},
+				Mux:                    &sync.RWMutex{},
 				StartingSequenceNumber: aws.StringValue(s.SequenceNumberRange.StartingSequenceNumber),
 				EndingSequenceNumber:   aws.StringValue(s.SequenceNumberRange.EndingSequenceNumber),
 			}
