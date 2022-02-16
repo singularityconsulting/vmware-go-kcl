@@ -19,10 +19,11 @@
 package test
 
 import (
+	"testing"
+
 	"github.com/aws/aws-sdk-go/aws"
 	kc "github.com/singularityconsulting/vmware-go-kcl/clientlibrary/interfaces"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 // Record processor factory is used to create RecordProcessor
