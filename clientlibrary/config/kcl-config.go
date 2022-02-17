@@ -256,6 +256,11 @@ func (c *KinesisClientLibConfiguration) WithLeaseStealingIntervalMillis(leaseSte
 	return c
 }
 
+func (c *KinesisClientLibConfiguration) WithLeaseStealingClaimTimeoutMillis(leaseStealingClaimTimeoutMillis int) *KinesisClientLibConfiguration {
+	c.LeaseStealingClaimTimeoutMillis = leaseStealingClaimTimeoutMillis
+	return c
+}
+
 func (c *KinesisClientLibConfiguration) WithLeaseSyncingIntervalMillis(leaseSyncingIntervalMillis int) *KinesisClientLibConfiguration {
 	c.LeaseSyncingTimeIntervalMillis = leaseSyncingIntervalMillis
 	return c
