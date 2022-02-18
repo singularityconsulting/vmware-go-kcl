@@ -167,6 +167,13 @@ func (p *MonitoringService) LeaseGained(shard string) {
 
 func (p *MonitoringService) LeaseLost(shard string) {
 	p.leasesHeld.With(prom.Labels{"shard": shard, "kinesisStream": p.streamName, "workerID": p.workerID}).Dec()
+	// we need to remove the other metrics for the shard, or we'll have a stale value
+	p.processedRecords.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
+	p.processedBytes.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
+	p.behindLatestMillis.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
+	p.getRecordsTime.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
+	p.processRecordsTime.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
+	p.deaggregateError.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName, "workerID": p.workerID})
 }
 
 func (p *MonitoringService) LeaseRenewed(shard string) {
