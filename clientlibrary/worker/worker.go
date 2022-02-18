@@ -415,7 +415,7 @@ func (w *Worker) rebalance() error {
 		}
 		// Our shard steal was stomped on by a Checkpoint.
 		// We could deal with that, but instead just try again
-		log.Infof("Steal stomped by checkpoint. workerID: %s", w.workerID)
+		log.Debugf("Steal stomped by checkpoint. workerID: %s", w.workerID)
 		w.shardStealInProgress = false
 	}
 
