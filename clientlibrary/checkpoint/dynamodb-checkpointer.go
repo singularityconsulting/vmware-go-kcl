@@ -281,7 +281,13 @@ func (checkpointer *DynamoCheckpoint) FetchCheckpoint(shard *par.ShardStatus) er
 		if err != nil {
 			return err
 		}
-		shard.LeaseTimeout = currentLeaseTimeout
+		shard.SetLeaseTimeout(currentLeaseTimeout)
+	}
+
+	if claimRequest, ok := checkpoint[ClaimRequestKey]; ok {
+		shard.SetClaimRequest(aws.StringValue(claimRequest.S))
+	} else {
+		shard.SetClaimRequest("")
 	}
 
 	return nil
@@ -421,7 +427,7 @@ func (checkpointer *DynamoCheckpoint) syncLeases(shardStatus map[string]*par.Sha
 
 	checkpointer.lastLeaseSync = time.Now()
 	input := &dynamodb.ScanInput{
-		ProjectionExpression: aws.String(fmt.Sprintf("%s,%s,%s", LeaseKeyKey, LeaseOwnerKey, SequenceNumberKey)),
+		ProjectionExpression: aws.String(fmt.Sprintf("%s,%s,%s,%s", LeaseKeyKey, LeaseOwnerKey, SequenceNumberKey, ClaimRequestKey)),
 		Select:               aws.String("SPECIFIC_ATTRIBUTES"),
 		TableName:            aws.String(checkpointer.kclConfig.TableName),
 	}
@@ -439,6 +445,11 @@ func (checkpointer *DynamoCheckpoint) syncLeases(shardStatus map[string]*par.Sha
 				if shard, ok := shardStatus[aws.StringValue(shardId.S)]; ok {
 					shard.SetLeaseOwner(aws.StringValue(assignedTo.S))
 					shard.SetCheckpoint(aws.StringValue(checkpoint.S))
+					if claimRequest, foundClaimRequest := result[ClaimRequestKey]; foundClaimRequest {
+						shard.SetClaimRequest(aws.StringValue(claimRequest.S))
+					} else {
+						shard.SetClaimRequest("")
+					}
 				}
 			}
 			return !lastPage

@@ -354,6 +354,7 @@ func (w *Worker) eventLoop() {
 				if stealShard {
 					log.Debugf("Successfully stole shard: %+v", shard.ID)
 					w.shardStealInProgress = false
+					w.shardStatus[shard.ID].SetClaimRequest("")
 				}
 
 				// log metrics on got lease
@@ -411,10 +412,11 @@ func (w *Worker) rebalance() error {
 				log.Debugf("Steal in progress. workerID: %s", w.workerID)
 				return nil
 			}
-			// Our shard steal was stomped on by a Checkpoint.
-			// We could deal with that, but instead just try again
-			w.shardStealInProgress = false
 		}
+		// Our shard steal was stomped on by a Checkpoint.
+		// We could deal with that, but instead just try again
+		log.Debugf("Steal stomped by checkpoint. workerID: %s", w.workerID)
+		w.shardStealInProgress = false
 	}
 
 	var numShards int
@@ -472,6 +474,9 @@ func (w *Worker) rebalance() error {
 		w.shardStealInProgress = false
 		return err
 	}
+
+	w.shardStatus[shardToSteal.ID].SetClaimRequest(w.workerID)
+
 	return nil
 }
 
