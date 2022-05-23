@@ -72,6 +72,8 @@ type Worker struct {
 
 	shardStatus          map[string]*par.ShardStatus
 	shardStealInProgress bool
+
+	numActiveShards int
 }
 
 // NewWorker constructs a Worker instance for processing Kinesis stream data.
@@ -91,6 +93,7 @@ func NewWorker(factory kcl.IRecordProcessorFactory, kclConfig *config.KinesisCli
 		mService:         mService,
 		done:             false,
 		randomSeed:       time.Now().UTC().UnixNano(),
+		numActiveShards:  0,
 	}
 }
 
@@ -121,6 +124,8 @@ func (w *Worker) Start() error {
 		log.Errorf("Failed to start monitoring service: %+v", err)
 		return err
 	}
+
+	w.mService.NumActiveShards(0)
 
 	log.Infof("Starting worker event loop.")
 	w.waitGroup.Add(1)
@@ -269,6 +274,14 @@ func (w *Worker) newShardConsumer(shard *par.ShardStatus) shardConsumer {
 	}
 }
 
+func (w *Worker) setNumActiveShards(numShards int) {
+	if w.numActiveShards != numShards {
+		w.kclConfig.Logger.Infof("Found %d active shards", numShards)
+		w.numActiveShards = numShards
+		w.mService.NumActiveShards(numShards)
+	}
+}
+
 // eventLoop
 func (w *Worker) eventLoop() {
 	log := w.kclConfig.Logger
@@ -299,11 +312,20 @@ func (w *Worker) eventLoop() {
 
 		// Count the number of leases hold by this worker excluding the processed shard
 		counter := 0
+		activeShards := 0
 		for _, shard := range w.shardStatus {
-			if shard.GetLeaseOwner() == w.workerID && shard.GetCheckpoint() != chk.ShardEnd {
-				counter++
+			isShardOwned := shard.GetLeaseOwner() == w.workerID
+			isShardActive := shard.GetCheckpoint() != chk.ShardEnd
+
+			if isShardActive {
+				activeShards++
+				if isShardOwned {
+					counter++
+				}
 			}
 		}
+
+		w.setNumActiveShards(activeShards)
 
 		// max number of lease has not been reached yet
 		if counter < w.kclConfig.MaxLeasesForWorker {

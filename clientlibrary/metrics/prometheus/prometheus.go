@@ -54,6 +54,7 @@ type MonitoringService struct {
 	getRecordsTime     *prom.HistogramVec
 	processRecordsTime *prom.HistogramVec
 	numShards          *prom.GaugeVec
+	numActiveShards    *prom.GaugeVec
 	deaggregateError   *prom.CounterVec
 }
 
@@ -107,6 +108,10 @@ func (p *MonitoringService) Init(appName, streamName, workerID string) error {
 		Name: p.namespace + `_num_shards_total`,
 		Help: "The number of shards in the stream",
 	}, []string{"kinesisStream"})
+	p.numActiveShards = prom.NewGaugeVec(prom.GaugeOpts{
+		Name: p.namespace + `_num_active_shards_total`,
+		Help: "The number of active shards in the stream",
+	}, []string{"kinesisStream"})
 	p.deaggregateError = prom.NewCounterVec(prom.CounterOpts{
 		Name: p.namespace + `_deaggregate_error_total`,
 		Help: "Number of deaggregate errors while processing kinesis records",
@@ -120,6 +125,7 @@ func (p *MonitoringService) Init(appName, streamName, workerID string) error {
 		p.leaseRenewals,
 		p.getRecordsTime,
 		p.processRecordsTime,
+		p.numActiveShards,
 		p.numShards,
 		p.deaggregateError,
 	}
@@ -190,6 +196,10 @@ func (p *MonitoringService) RecordProcessRecordsTime(shard string, time float64)
 
 func (p *MonitoringService) NumShards(shards int) {
 	p.numShards.With(prom.Labels{"kinesisStream": p.streamName}).Set(float64(shards))
+}
+
+func (p *MonitoringService) NumActiveShards(shards int) {
+	p.numActiveShards.With(prom.Labels{"kinesisStream": p.streamName}).Set(float64(shards))
 }
 
 func (p *MonitoringService) DeaggregateError(shard string) {

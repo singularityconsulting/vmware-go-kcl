@@ -338,6 +338,7 @@ func (cw *MonitoringService) RecordProcessRecordsTime(shard string, time float64
 
 // for cloudwatch we don't do anything for now
 func (cw *MonitoringService) NumShards(shards int)          {}
+func (cw *MonitoringService) NumActiveShards(shards int)    {}
 func (cw *MonitoringService) DeaggregateError(shard string) {}
 
 func (cw *MonitoringService) getOrCreatePerShardMetrics(shard string) *cloudWatchMetrics {
