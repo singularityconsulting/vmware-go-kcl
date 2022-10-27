@@ -168,18 +168,18 @@ func (p *MonitoringService) MillisBehindLatest(shard string, millSeconds float64
 }
 
 func (p *MonitoringService) LeaseGained(shard string) {
-	p.leasesHeld.With(prom.Labels{"shard": shard, "kinesisStream": p.streamName, "workerID": p.workerID}).Inc()
+	p.leasesHeld.With(prom.Labels{"shard": shard, "kinesisStream": p.streamName, "workerID": p.workerID}).Set(1)
 }
 
 func (p *MonitoringService) LeaseLost(shard string) {
-	p.leasesHeld.With(prom.Labels{"shard": shard, "kinesisStream": p.streamName, "workerID": p.workerID}).Dec()
+	p.leasesHeld.With(prom.Labels{"shard": shard, "kinesisStream": p.streamName, "workerID": p.workerID}).Set(0)
 	// we need to remove the other metrics for the shard, or we'll have a stale value
-	p.processedRecords.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
-	p.processedBytes.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
-	p.behindLatestMillis.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
-	p.getRecordsTime.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
-	p.processRecordsTime.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName})
-	p.deaggregateError.Delete(prom.Labels{"shard": shard, "kinesisStream": p.streamName, "workerID": p.workerID})
+	p.processedBytes.DeletePartialMatch(prom.Labels{"shard": shard})
+	p.processedRecords.DeletePartialMatch(prom.Labels{"shard": shard})
+	p.behindLatestMillis.DeletePartialMatch(prom.Labels{"shard": shard})
+	p.getRecordsTime.DeletePartialMatch(prom.Labels{"shard": shard})
+	p.processRecordsTime.DeletePartialMatch(prom.Labels{"shard": shard})
+	p.deaggregateError.DeletePartialMatch(prom.Labels{"shard": shard})
 }
 
 func (p *MonitoringService) LeaseRenewed(shard string) {
